@@ -1,12 +1,15 @@
 const User = require("../models/user.model");
-const jwt = require("jsonwebtoken");
+const RefreshToken = require("../models/refreshToken.model");
+
+const generateAccessToken = require("../lib/generateAccessToken");
+const generateRefreshToken = require("../lib/generateRefreshToken");
 
 const SignUp = async (req, res) => {
   const { username, email, password } = req.body;
   if (!username || !email || !password) {
     res.status(400).json({
       message: "Please provide all credential",
-      success: false
+      success: false,
     });
   }
 
@@ -14,7 +17,7 @@ const SignUp = async (req, res) => {
   if (user) {
     return res.status(400).json({
       message: "User already Exists",
-      success: false
+      success: false,
     });
   }
 
@@ -23,7 +26,7 @@ const SignUp = async (req, res) => {
     await newUser.save();
     res.status(201).json({
       message: "User created Successfully",
-      success:true,
+      success: true,
       data: {
         username: newUser.username,
         email: newUser.email,
@@ -33,8 +36,8 @@ const SignUp = async (req, res) => {
     console.log(err.message);
     res.status(500).json({
       message: "Unable to create an account",
-      success: false
-    })
+      success: false,
+    });
   }
 };
 
@@ -47,21 +50,43 @@ const Login = async (req, res) => {
       });
     }
 
-    const user = await User.findOne({email});
-    if(!user){
+    const user = await User.findOne({ email });
+    if (!user) {
       res.status(404).json({
         message: "User not found",
-        success: false
-      })
+        success: false,
+      });
     }
 
     const passwordMatches = await user.comparePassword(password);
-    if(!passwordMatches){
+    if (!passwordMatches) {
       res.status(401);
-      throw new Error('Invalid password');
+      throw new Error("Invalid password");
     }
 
-    const accessToken = await jwt.sign(user.username, process.env.ACCESS_TOKEN_SECRET);
+    const accessToken = generateAccessToken({
+      username: user.username,
+      userId: user._id,
+    });
+    const refreshToken = generateRefreshToken({
+      username: user.username,
+      userId: user._id,
+    });
+
+    const userRefreshTokenData = await RefreshToken.findOne({
+      userId: user._id,
+    });
+
+    if (!userRefreshTokenData) {
+      const refreshTokenData = {
+        userId: user._id,
+        token: refreshToken,
+      };
+      await RefreshToken.create(refreshTokenData);
+    } else {
+      userRefreshTokenData.token = refreshToken;
+      userRefreshTokenData.save();
+    }
 
     res.status(200).json({
       message: "Login Successfull",
@@ -69,19 +94,16 @@ const Login = async (req, res) => {
       data: {
         username: user.username,
         email: user.email,
-        accessToken
-      }
-    })
-
-
-
-    
+        accessToken,
+        refreshToken: refreshToken,
+      },
+    });
   } catch (error) {
     console.log(error);
     res.status(500).json({
       message: error.message,
-      success: false
-    })
+      success: false,
+    });
   }
 };
 
