@@ -15,26 +15,40 @@ const userSchema = new mongoose.Schema({
     type: String,
     required: true,
   },
+  profilePicture: {
+    type: String
+  },
   posts: [
     {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Post",
     },
   ],
-  friends: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
-  friendRequests: [
+  friends: [
     {
-      sender: {
+      userId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User"
+      }
+    }
+  ]
+  ,
+  receivedRequests: [
+    {
+      senderId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: "User",
-      },
-      status: {
-        type: String,
-        enum: ["pending", "accepted", "rejected"],
-        default: "pending",
-      },
+      }
     },
   ],
+  sentRequests: [
+    {
+      receiverId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User"
+      }
+    }
+  ]
 });
 
 userSchema.pre("save", async function (next) {
@@ -51,5 +65,4 @@ userSchema.methods.comparePassword = async function (password) {
   return await bcrypt.compare(password, this.password);
 };
 
-const User = mongoose.model("User", userSchema);
-module.exports = User;
+module.exports = mongoose.model("User", userSchema);

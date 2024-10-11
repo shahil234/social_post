@@ -1,32 +1,105 @@
+const { request } = require("express");
 const User = require("../models/user.model");
 
 const sendFriendRequest = async (req, res) => {
   try {
-    const { receiverId } = req.params;
     const { userId } = req.user;
+    const { receiverId } = req.body;
 
-    const request = await User.findByIdAndUpdate(receiverId, {
-      $push: {
-        friendRequests: {
-          sender: userId,
-        },
-      },
+    if (!receiverId) {
+      return res.status(400).json({
+        message: "Invalid receiverId",
+        success: false,
+      });
+    }
+
+    if (receiverId === userId) {
+      return res.status(400).json({
+        message: "Cannot send requests to yourself",
+        success: false,
+      });
+    }
+
+    const sender = await User.findById(userId);
+    const receiver = await User.findById(receiverId);
+
+    const duplicateRequest =
+      sender.sentRequests.filter(
+        (req) => req.receiverId.toString() === receiverId
+      ).length === 0;
+    console.log(duplicateRequest);
+    if (
+      sender.sentRequests.filter(
+        (req) => req.receiverId.toString() === receiverId
+      ).length > 0
+    ) {
+      return res.status(400).json({
+        message: "Cannot send multiple requests to same user",
+        success: false,
+      });
+    }
+
+    sender.sentRequests.push({
+      receiverId,
     });
-    res.json({
-      message: "Successfully sent friend request to " + request.username,
+    await sender.save();
+    receiver.receivedRequests.push({
+      senderId: userId,
+    });
+    await receiver.save();
+    res.status(200).json({
+      message: "Successfully sent friend requests to " + receiver.username,
       success: true,
     });
-  } catch (error) {
+  } catch (err) {
     res.status(500).json({
-      message: "Cannot send friend request",
+      message: "Failed sending request",
+      success: false,
     });
   }
 };
 
-const deleteRequest = async (req, res) => {
-};
+const acceptFriendRequest = async (req, res) => {
+  try {
+    const { userId } = req.user;
+    const { requestId } = req.body;
 
-const acceptRequest = async (req, res) => {
+    const receiver = await User.findById(userId);
+    if (!requestId || !receiver.receivedRequests.find(item => item._id.toString() === requestId)) {
+      return res.status(400).json({
+        message: "Invalid request id",
+        success: false,
+      });
+    }
 
+    const request = receiver.receivedRequests.find(
+      (item) => item._id.toString() === requestId
+    );
+    const sender = await User.findById(request.senderId);
+
+    receiver.friends.push({
+      userId: sender._id,
+    });
+
+    receiver.receivedRequests = receiver.receivedRequests.filter(item => item.senderId.toString() !== sender._id.toString());
+    await receiver.save();
+
+    sender.friends.push({
+      userId: receiver._id,
+    });
+    sender.sentRequests = sender.sentRequests.filter(item => item.receiverId.toString() !== receiver._id.toString());
+
+    await sender.save()
+    res.status(200).json({
+      message: `Successfully accepted friend request of ${sender.username} `,
+      success: true,
+    });
+  } catch (error) {
+    console.log(error)
+    res.status(500).json({
+      message: "Failed to accept request",
+      success: false,
+    });
+  }
 };
-module.exports = { sendFriendRequest, deleteRequest, acceptRequest };
+module.exports = { sendFriendRequest, acceptFriendRequest };
